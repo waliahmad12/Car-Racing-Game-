@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Car Racing Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FF 100%);
+        }
+
+        #top {
+            background: #111;
+            color: #fff;
+            text-align: center;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        #gameInfo {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+
+        #dayNightBtn {
+            background: #FF9800;
+            border: none;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            cursor: pointer;
+        }
+
+        canvas {
+            display: block;
+            margin: 15px auto;
+            border-radius: 10px;
+        }
+
+        #menu {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            width: 100%;
+            max-height: 70vh;
+            overflow-y: auto;
+            text-align: center;
+            color: white;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            border-radius: 0 0 15px 15px;
+        }
+
+        #menu h2 {
+            margin: 10px 0;
+            color: #FF9800;
+        }
+
+        #menu button {
+            padding: 12px 25px;
+            font-size: 16px;
+            margin: 8px;
+            background: #FF9800;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 25px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 10%;
+        }
+
+        .btn {
+            width: 75px;
+            height: 75px;
+            border-radius: 50%;
+            background: #333;
+            color: #fff;
+            font-size: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid #FF9800;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite;
+        }
+
+        @keyframes twinkle {
+
+            0%,
+            100% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+        
+        /* DEV BUTTON - SIRF TUMHE DIKHEGA */
+        .dev-btn {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="top">Made by Wali, MANUU Polytechnic Bangalore | Level: <span id="levelText">1</span>
+        <div id="gameInfo">
+            <div>Speed: <span id="speedText">4.8</span></div>
+            <div>Time: <span id="timeText">0</span>s / 15s</div><button id="dayNightBtn" onclick="toggleDayNight()">🌙 Night</button>
+        </div>
+    </div>
+    <canvas id="game" width="400" height="650"></canvas>
+    <div id="menu"></div>
+    <div class="controls">
+        <div class="btn" id="left">◀</div>
+        <div class="btn" id="right">▶</div>
+    </div>
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        let carX = 160,
+            left = false,
+            right = false,
+            enemies = [],
+            trees = [],
+            stars = [];
+        let speed = 4,
+            time = 0,
+            playing = false,
+            isDay = true;
+        
+        // UNIQUE USER ID BANAYA - HAR USER KA ALAG PROGRESS
+        let userId = localStorage.getItem("racingGameUserId");
+        if (!userId) {
+            // Naya user hai - random ID generate karo
+            userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem("racingGameUserId", userId);
+        }
+        
+        // USER-SPECIFIC LEVEL STORAGE
+        let unlockedLevel = Number(localStorage.getItem(`racingGameLevel_${userId}`)) || 1;
+        let level = 1; // HAR USER LEVEL 1 SE START KAREGA
+        
+        document.getElementById("levelText").innerText = level;
+        const LEVEL_TIME = 900;
+        
+        // DEV MODE CHECK - SIRF TUMHARE LIYE
+        const isDeveloper = window.location.hash === '#dev' || 
+                           localStorage.getItem("isDev") === 'true' ||
+                           document.referrer.includes('wali') ||
+                           navigator.userAgent.includes('Wali');
+        
+        if (isDeveloper) {
+            // CSS me dev button show karo
+            const style = document.createElement('style');
+            style.textContent = '.dev-btn { display: block !important; background: #9C27B0 !important; }';
+            document.head.appendChild(style);
+        }
+
+        function toggleDayNight() {
+            isDay = !isDay;
+            document.body.style.background = isDay ?
+                "linear-gradient(to bottom, #87CEEB 0%, #E0F7FF 100%)" :
+                "linear-gradient(to bottom, #0A1931 0%, #1E3A5F 100%)";
+            document.getElementById("dayNightBtn").textContent = isDay ? "🌙 Night" : "☀️ Day";
+            if (!isDay) createStars();
+            else stars = [];
+        }
+
+        function createStars() {
+            stars = [];
+            for (let i = 0; i < 25; i++) {
+                stars.push({
+                    x: Math.random() * 400,
+                    y: Math.random() * 300,
+                    size: Math.random() * 2 + 1,
+                    brightness: Math.random() * 0.5 + 0.5
+                });
+            }
+        }
+
+        function drawSky() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, 650);
+            if (isDay) {
+                gradient.addColorStop(0, "#87CEEB");
+                gradient.addColorStop(1, "#E0F7FF");
+            } else {
+                gradient.addColorStop(0, "#0A1931");
+                gradient.addColorStop(1, "#1E3A5F");
+            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 400, 650);
+
+            if (isDay) {
+                ctx.fillStyle = "#FFD700";
+                ctx.shadowColor = "#FFA500";
+                ctx.shadowBlur = 30;
+                ctx.beginPath();
+                ctx.arc(350, 60, 40, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            } else {
+                stars.forEach(star => {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${star.brightness})`;
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+        }
+
+        function drawRoad() {
+            ctx.fillStyle = isDay ? "#2D5016" : "#1A3A0A";
+            ctx.fillRect(0, 0, 400, 650);
+
+            ctx.fillStyle = isDay ? "#333" : "#222";
+            ctx.fillRect(30, 0, 340, 650);
+
+            ctx.strokeStyle = isDay ? "#FFCC00" : "#FFAA00";
+            ctx.lineWidth = 6;
+            ctx.strokeRect(30, 0, 340, 650);
+
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 4;
+            ctx.setLineDash([25, 25]);
+            ctx.lineDashOffset = -time % 50;
+
+            for (let i = -50; i < 700; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(200, i + (time % 50));
+                ctx.lineTo(200, i + 25 + (time % 50));
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+        }
+
+        function drawCar() {
+            const carWidth = 50;
+            const carHeight = 100;
+            const carColor = isDay ? "#1E88E5" : "#1565C0";
+
+            ctx.save();
+
+            ctx.fillStyle = carColor;
+            ctx.beginPath();
+            ctx.moveTo(carX, 530);
+            ctx.lineTo(carX, 550);
+            ctx.quadraticCurveTo(carX, 530, carX + 10, 530);
+            ctx.lineTo(carX + carWidth - 10, 530);
+            ctx.quadraticCurveTo(carX + carWidth, 530, carX + carWidth, 550);
+            ctx.lineTo(carX + carWidth, 600);
+            ctx.quadraticCurveTo(carX + carWidth, 620, carX + carWidth - 15, 620);
+            ctx.lineTo(carX + 15, 620);
+            ctx.quadraticCurveTo(carX, 620, carX, 600);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = isDay ? "#1565C0" : "#0D47A1";
+            ctx.beginPath();
+            ctx.moveTo(carX + 10, 530);
+            ctx.quadraticCurveTo(carX + carWidth / 2, 510, carX + carWidth - 10, 530);
+            ctx.lineTo(carX + carWidth - 10, 540);
+            ctx.quadraticCurveTo(carX + carWidth / 2, 520, carX + 10, 540);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = isDay ? "#BBE8FF" : "#90CAF9";
+            ctx.beginPath();
+            ctx.moveTo(carX + 15, 535);
+            ctx.quadraticCurveTo(carX + carWidth / 2, 515, carX + carWidth - 15, 535);
+            ctx.lineTo(carX + carWidth - 15, 545);
+            ctx.quadraticCurveTo(carX + carWidth / 2, 525, carX + 15, 545);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#FFEB3B";
+            ctx.beginPath();
+            ctx.arc(carX + 12, 540, 4, 0, Math.PI * 2);
+            ctx.arc(carX + carWidth - 12, 540, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#FF5252";
+            ctx.beginPath();
+            ctx.arc(carX + 12, 615, 4, 0, Math.PI * 2);
+            ctx.arc(carX + carWidth - 12, 615, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            drawWheel(carX + 8, 610, 10, 20);
+            drawWheel(carX + carWidth - 18, 610, 10, 20);
+            drawWheel(carX + 8, 545, 10, 20);
+            drawWheel(carX + carWidth - 18, 545, 10, 20);
+
+            ctx.restore();
+        }
+
+        function drawWheel(x, y, width, height) {
+            ctx.fillStyle = "#111";
+            ctx.fillRect(x, y, width, height);
+
+            ctx.fillStyle = "#666";
+            ctx.beginPath();
+            ctx.arc(x + width / 2, y + height / 2, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#444";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + 2, y + 5);
+            ctx.lineTo(x + width - 2, y + 5);
+            ctx.moveTo(x + 2, y + height - 5);
+            ctx.lineTo(x + width - 2, y + height - 5);
+            ctx.stroke();
+        }
+
+        function spawnEnemy() {
+            enemies.push({
+                x: Math.random() * 280 + 30,
+                y: -120,
+                color: isDay ? "#E53935" : "#B71C1C",
+                width: 50,
+                height: 100
+            });
+        }
+
+        function drawEnemies() {
+            enemies.forEach(e => {
+                ctx.save();
+
+                ctx.fillStyle = e.color;
+                ctx.beginPath();
+                ctx.moveTo(e.x, e.y + 30);
+                ctx.lineTo(e.x, e.y + 50);
+                ctx.quadraticCurveTo(e.x, e.y + 30, e.x + 10, e.y + 30);
+                ctx.lineTo(e.x + e.width - 10, e.y + 30);
+                ctx.quadraticCurveTo(e.x + e.width, e.y + 30, e.x + e.width, e.y + 50);
+                ctx.lineTo(e.x + e.width, e.y + 100);
+                ctx.quadraticCurveTo(e.x + e.width, e.y + 120, e.x + e.width - 15, e.y + 120);
+                ctx.lineTo(e.x + 15, e.y + 120);
+                ctx.quadraticCurveTo(e.x, e.y + 120, e.x, e.y + 100);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = isDay ? "#C62828" : "#7F0000";
+                ctx.beginPath();
+                ctx.moveTo(e.x + 10, e.y + 30);
+                ctx.quadraticCurveTo(e.x + e.width / 2, e.y + 10, e.x + e.width - 10, e.y + 30);
+                ctx.lineTo(e.x + e.width - 10, e.y + 40);
+                ctx.quadraticCurveTo(e.x + e.width / 2, e.y + 20, e.x + 10, e.y + 40);
+                ctx.closePath();
+                ctx.fill();
+
+                drawWheel(e.x + 8, e.y + 110, 10, 20);
+                drawWheel(e.x + e.width - 18, e.y + 110, 10, 20);
+                drawWheel(e.x + 8, e.y + 45, 10, 20);
+                drawWheel(e.x + e.width - 18, e.y + 45, 10, 20);
+
+                e.y += speed;
+
+                if (e.x < carX + 50 && e.x + 50 > carX && e.y < 630 && e.y + 100 > 530) {
+                    gameOver();
+                }
+
+                ctx.restore();
+            });
+        }
+
+        function spawnTree() {
+            trees.push({
+                x: Math.random() < 0.5 ? 5 : 355,
+                y: -60
+            });
+        }
+
+        function drawTrees() {
+            trees.forEach(t => {
+                ctx.fillStyle = isDay ? "#8D6E63" : "#5D4037";
+                ctx.fillRect(t.x + 5, t.y + 40, 6, 40);
+
+                ctx.fillStyle = isDay ? "#2E7D32" : "#1B5E20";
+                ctx.beginPath();
+                ctx.arc(t.x + 8, t.y + 20, 15, 0, Math.PI * 2);
+                ctx.fill();
+
+                t.y += speed;
+            });
+        }
+
+        function gameLoop() {
+            if (!playing) return;
+
+            document.getElementById("speedText").textContent = speed.toFixed(1);
+            document.getElementById("timeText").textContent = Math.floor(time / 60);
+
+            ctx.clearRect(0, 0, 400, 650);
+            drawSky();
+            drawRoad();
+            drawTrees();
+            drawEnemies();
+            drawCar();
+
+            if (left) carX -= 4 + level * 0.3;
+            if (right) carX += 4 + level * 0.3;
+            carX = Math.max(35, Math.min(315, carX));
+
+            time++;
+
+            if (time > LEVEL_TIME) {
+                playing = false;
+                if (level >= unlockedLevel) {
+                    unlockedLevel = level + 1;
+                    // USER-SPECIFIC SAVE
+                    localStorage.setItem(`racingGameLevel_${userId}`, unlockedLevel);
+                }
+                showLevelCompleteMenu();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function showStartMenu() {
+            let menuHTML = `
+                <h2>LEVEL ${level}</h2>
+                <p>Complete in 15 seconds!</p>
+                <button onclick="startGame()">START RACE</button>
+                <button onclick="selectLevel()">SELECT LEVEL</button>
+                <button onclick="toggleDayNight()">${isDay ? "🌙 NIGHT MODE" : "☀️ DAY MODE"}</button>
+                <button onclick="resetGame()">🔄 RESET GAME</button>`;
+            
+            // SIRF DEVELOPER KE LIYE DEV BUTTON
+            if (isDeveloper) {
+                menuHTML += `<button class="dev-btn" onclick="setDevLevel()">DEV: Level 14</button>`;
+            }
+            
+            document.getElementById("menu").innerHTML = menuHTML;
+        }
+
+        function showLevelCompleteMenu() {
+            document.getElementById("menu").innerHTML = `
+                <h2>🏁 LEVEL ${level} COMPLETE!</h2>
+                <h2>  NEXT LEVEL UNLOCKED 🎮!</h2>
+                <p>Time: ${Math.floor(time / 60)} seconds</p>
+                <p>Unlocked Level: ${unlockedLevel}</p>
+                <button onclick="nextLevel()">NEXT LEVEL</button>
+                <button onclick="selectLevel()">SELECT LEVEL</button>
+                <button onclick="showStartMenu()">MAIN MENU</button>`;
+        }
+
+        function showGameOverMenu() {
+            document.getElementById("menu").innerHTML = `
+                <h2>MISSION FAIL</h2>
+                <h2>PLEASE TRY AGAIN</h2>
+                <p>Level: ${level}</p>
+                <button onclick="retrySameLevel()">TRY AGAIN</button>
+                <button onclick="selectLevel()">SELECT LEVEL</button>
+                <button onclick="showStartMenu()">MAIN MENU</button>`;
+        }
+
+        function startGame() {
+            document.getElementById("menu").innerHTML = "";
+            enemies = [];
+            trees = [];
+            speed = 4 + level * 0.8;
+            time = 0;
+            playing = true;
+            gameLoop();
+        }
+
+        function retrySameLevel() {
+            startGame();
+        }
+
+        function nextLevel() {
+            level++;
+            document.getElementById("levelText").innerText = level;
+            startGame();
+        }
+
+        function gameOver() {
+            playing = false;
+            showGameOverMenu();
+        }
+
+        function selectLevel() {
+            let html = `<h2>SELECT LEVEL</h2><p>Unlocked: ${unlockedLevel}</p>`;
+            for (let i = 1; i <= unlockedLevel; i++) {
+                html += `<button onclick="playLevel(${i})">Level ${i}</button><br>`;
+            }
+            html += `<button onclick="showStartMenu()" style="margin-top:20px;">BACK</button>`;
+            document.getElementById("menu").innerHTML = html;
+        }
+
+        function playLevel(lv) {
+            level = lv;
+            document.getElementById("levelText").innerText = level;
+            startGame();
+        }
+
+        function resetGame() {
+            if (confirm("Are you sure you want to reset YOUR game progress?")) {
+                // Sirf current user ka progress reset
+                localStorage.setItem(`racingGameLevel_${userId}`, 1);
+                unlockedLevel = 1;
+                level = 1;
+                document.getElementById("levelText").innerText = level;
+                showStartMenu();
+            }
+        }
+
+        // SIRF DEVELOPER KE LIYE - TUMHARE LIYE LEVEL 14 SET KARNA
+        function setDevLevel() {
+            unlockedLevel = 14;
+            level = 14;
+            localStorage.setItem(`racingGameLevel_${userId}`, unlockedLevel);
+            document.getElementById("levelText").innerText = level;
+            showStartMenu();
+        }
+
+        document.getElementById("left").addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            left = true;
+        });
+        document.getElementById("left").addEventListener("touchend", () => left = false);
+        document.getElementById("right").addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            right = true;
+        });
+        document.getElementById("right").addEventListener("touchend", () => right = false);
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowLeft" || e.key === "a") left = true;
+            if (e.key === "ArrowRight" || e.key === "d") right = true;
+        });
+        document.addEventListener("keyup", (e) => {
+            if (e.key === "ArrowLeft" || e.key === "a") left = false;
+            if (e.key === "ArrowRight" || e.key === "d") right = false;
+        });
+
+        setInterval(spawnEnemy, 1500 - level * 60);
+        setInterval(spawnTree, 2000);
+
+        showStartMenu();
+    </script>
+</body>
+
+</html>
